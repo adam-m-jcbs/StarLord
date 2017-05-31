@@ -69,8 +69,8 @@ contains
     real(rt), pointer :: smallc(:,:), cavg(:,:)
     real(rt), pointer :: gamcm(:,:), gamcp(:,:)
 #endif
-    real(rt), allocatable :: smallc(:,:), cavg(:,:)
-    real(rt), allocatable :: gamcm(:,:), gamcp(:,:)
+    real(rt), shared :: smallc(ilo:ihi,jlo:jhi), cavg(ilo:ihi,jlo:jhi)
+    real(rt), shared :: gamcm(ilo:ihi,jlo:jhi), gamcp(ilo:ihi,jlo:jhi)
     integer           :: is_shock
     real(rt)          :: cl, cr
     type (eos_t)      :: eos_state
@@ -85,11 +85,6 @@ contains
     call bl_allocate (  gamcm, gd_lo(1),gd_hi(1),gd_lo(2),gd_hi(2))
     call bl_allocate (  gamcp, gd_lo(1),gd_hi(1),gd_lo(2),gd_hi(2))
 #endif
-
-    allocate ( smallc(gd_lo(1):gd_hi(1),gd_lo(2):gd_hi(2)))
-    allocate (   cavg(gd_lo(1):gd_hi(1),gd_lo(2):gd_hi(2)))
-    allocate (  gamcm(gd_lo(1):gd_hi(1),gd_lo(2):gd_hi(2)))
-    allocate (  gamcp(gd_lo(1):gd_hi(1),gd_lo(2):gd_hi(2)))
 
     if (idir == 1) then
        do j = jlo, jhi
@@ -192,11 +187,6 @@ contains
     call bl_deallocate( gamcp)
 #endif
 
-    deallocate(smallc)
-    deallocate(  cavg)
-    deallocate( gamcm)
-    deallocate( gamcp)
-
   end subroutine cmpflx
 
 
@@ -258,7 +248,7 @@ contains
     real(rt)        , pointer :: us1d(:)
 #endif
 
-    real(rt), allocatable :: us1d(:)
+    real(rt) :: us1d(ilo:ihi)
 
     real(rt)         :: u_adv
 
@@ -270,7 +260,6 @@ contains
 #if 0
     call bl_allocate(us1d,ilo,ihi)
 #endif
-    allocate(us1d(ilo:ihi))
 
     if (idir .eq. 1) then
        iu = QU
@@ -508,7 +497,6 @@ contains
 #if 0
     call bl_deallocate(us1d)
 #endif
-    deallocate(us1d)
 
   end subroutine riemannus
 

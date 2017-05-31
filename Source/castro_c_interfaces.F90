@@ -661,6 +661,7 @@ contains
     integer                   :: cuda_result
     integer(cuda_stream_kind) :: stream
     type(dim3)                :: numThreads, numBlocks
+    integer :: tile_size(3)
 
     real(rt), device :: time_d
     integer,  device :: lo_d(3), hi_d(3), domlo_d(3), domhi_d(3)
@@ -783,7 +784,17 @@ contains
 
     call threads_and_blocks(lo, hi, numBlocks, numThreads)
 
-    call cuda_mol_single_stage<<<numBlocks, numThreads, 0, stream>>>(time_d, &
+    numThreads % x = 1
+    numThreads % y = 1
+    numThreads % z = 1
+
+    tile_size = hi - lo + 1
+
+    numBlocks % x = (tile_size(1) + numThreads % x - 1) / numThreads % x
+    numBlocks % y = (tile_size(2) + numThreads % y - 1) / numThreads % y
+    numBlocks % z = (tile_size(3) + numThreads % z - 1) / numThreads % z
+
+    call cuda_mol_single_stage<<<numBlocks, numThreads, 32000, stream>>>(time_d, &
                                                                      lo_d, hi_d, domlo_d, domhi_d, &
                                                                      uin, uin_l1_d, uin_l2_d, uin_l3_d, uin_h1_d, uin_h2_d, uin_h3_d, &
                                                                      uout, uout_l1_d, uout_l2_d, uout_l3_d, uout_h1_d, uout_h2_d, uout_h3_d, &

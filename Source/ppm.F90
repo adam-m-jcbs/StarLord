@@ -56,7 +56,7 @@ contains
                        sxm, sxp, sym, syp, szm, szp, sd_lo, sd_hi, &
                        ilo1, ilo2, ihi1, ihi2, dx, k3d, kc)
 
-    use mempool_module, only: bl_allocate, bl_deallocate
+!    use mempool_module, only: bl_allocate, bl_deallocate
     use amrex_fort_module, only: rt => amrex_real
 
     implicit none
@@ -92,14 +92,14 @@ contains
 #endif
     real(rt) :: dsvlm, dsvl0, dsvlp
 
-    real(rt), allocatable :: dsvl(:,:)
+    real(rt) :: dsvl(ilo1-2:ihi1+2,ilo2-2:ihi2+2)
 
     ! s_{i+\half}^{H.O.}
 #if 0
     real(rt), pointer :: sedge(:,:)
 #endif
 
-    real(rt), allocatable :: sedge(:,:)
+    real(rt) :: sedge(ilo1-1:ihi1+2,ilo2-1:ihi2+2)
 
 #ifndef CUDA
     if (s_lo(1) .gt. ilo1-3 .or. s_lo(2) .gt. ilo2-3) then
@@ -122,9 +122,6 @@ contains
     ! edge-centered indexing
     call bl_allocate(sedge,ilo1-1,ihi1+2,ilo2-1,ihi2+2)
 #endif
-
-    allocate(dsvl(ilo1-2:ihi1+2,ilo2-2:ihi2+2))
-    allocate(sedge(ilo1-1:ihi1+2,ilo2-1:ihi2+2))
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! x-direction
@@ -349,9 +346,6 @@ contains
     call bl_deallocate(dsvl)
     call bl_deallocate(sedge)
 #endif
-
-    deallocate(dsvl)
-    deallocate(sedge)
 
   end subroutine ppm_type1
 

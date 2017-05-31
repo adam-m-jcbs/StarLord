@@ -92,24 +92,32 @@ contains
 #endif
 
     ! Automatic arrays for workspace
-    real(rt), allocatable :: flatn(:,:,:)
-    real(rt), allocatable :: div(:,:,:)
-    real(rt), allocatable :: pdivu(:,:,:)
+    real(rt), shared :: flatn(q_l1:q_h1, q_l2:q_h2, q_l3:q_h3)
+    real(rt), shared :: div(lo(1):hi(1)+1,lo(2):hi(2)+2,lo(3):hi(3)+3)
+    real(rt), shared :: pdivu(lo(1):hi(1),lo(2):hi(2),lo(3):hi(3))
 
     ! Edge-centered primitive variables (Riemann state)
-    real(rt), allocatable :: q1(:,:,:,:)
-    real(rt), allocatable :: q2(:,:,:,:)
-    real(rt), allocatable :: q3(:,:,:,:)
-    real(rt), allocatable :: qint(:,:,:,:)
+    real(rt), shared :: q1(flux1_l1:flux1_h1,flux1_l2:flux1_h2,flux1_l3:flux1_h3,NGDNV)
+    real(rt), shared :: q2(flux2_l1:flux2_h1,flux2_l2:flux2_h2,flux2_l3:flux2_h3,NGDNV)
+    real(rt), shared :: q3(flux3_l1:flux3_h1,flux3_l2:flux3_h2,flux3_l3:flux3_h3,NGDNV)
+    real(rt), shared :: qint(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,1:2,NGDNV)
 
-    real(rt), allocatable :: shk(:,:,:)
+    real(rt), shared :: shk(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,lo(3)-1:hi(3)+1)
 
     ! temporary interface values of the parabola
-    real(rt), allocatable :: sxm(:,:,:,:), sym(:,:,:,:), szm(:,:,:,:)
-    real(rt), allocatable :: sxp(:,:,:,:), syp(:,:,:,:), szp(:,:,:,:)
+    real(rt), shared :: sxm(lo(1)-2:hi(1)+2,lo(2)-2:hi(2)+2,1:2,NQ)
+    real(rt), shared :: sym(lo(1)-2:hi(1)+2,lo(2)-2:hi(2)+2,1:2,NQ)
+    real(rt), shared :: szm(lo(1)-2:hi(1)+2,lo(2)-2:hi(2)+2,1:2,NQ)
+    real(rt), shared :: sxp(lo(1)-2:hi(1)+2,lo(2)-2:hi(2)+2,1:2,NQ)
+    real(rt), shared :: syp(lo(1)-2:hi(1)+2,lo(2)-2:hi(2)+2,1:2,NQ)
+    real(rt), shared :: szp(lo(1)-2:hi(1)+2,lo(2)-2:hi(2)+2,1:2,NQ)
 
-    real(rt), allocatable :: qxm(:,:,:,:), qym(:,:,:,:), qzm(:,:,:,:)
-    real(rt), allocatable :: qxp(:,:,:,:), qyp(:,:,:,:), qzp(:,:,:,:)
+    real(rt), shared :: qxm(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,1:2,NQ)
+    real(rt), shared :: qym(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,1:2,NQ)
+    real(rt), shared :: qzm(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,1:2,NQ)
+    real(rt), shared :: qxp(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,1:2,NQ)
+    real(rt), shared :: qyp(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,1:2,NQ)
+    real(rt), shared :: qzp(lo(1)-1:hi(1)+1,lo(2)-1:hi(2)+1,1:2,NQ)
 
     integer :: ngf
     integer :: uin_lo(3), uin_hi(3)
@@ -212,33 +220,6 @@ contains
     call bl_allocate(shk, shk_lo, shk_hi)
 #endif
 
-    allocate(   div(lo(1):hi(1)+1, lo(2):hi(2)+1, lo(3):hi(3)+1))
-    allocate( pdivu(lo(1):hi(1)  , lo(2):hi(2)  , lo(3):hi(3)  ))
-
-    allocate(q1(flux1_lo(1):flux1_hi(1), flux1_lo(2):flux1_hi(2), flux1_lo(3):flux1_hi(3), NGDNV))
-    allocate(q2(flux2_lo(1):flux2_hi(1), flux2_lo(2):flux2_hi(2), flux2_hi(3):flux2_hi(3), NGDNV))
-    allocate(q3(flux3_lo(1):flux3_hi(1), flux3_lo(2):flux3_hi(2), flux3_hi(3):flux3_hi(3), NGDNV))
-
-    allocate(sxm(st_lo(1):st_hi(1), st_lo(2):st_hi(2), st_lo(3):st_hi(3), NQ))
-    allocate(sxp(st_lo(1):st_hi(1), st_lo(2):st_hi(2), st_lo(3):st_hi(3), NQ))
-    allocate(sym(st_lo(1):st_hi(1), st_lo(2):st_hi(2), st_lo(3):st_hi(3), NQ))
-    allocate(syp(st_lo(1):st_hi(1), st_lo(2):st_hi(2), st_lo(3):st_hi(3), NQ))
-    allocate(szm(st_lo(1):st_hi(1), st_lo(2):st_hi(2), st_lo(3):st_hi(3), NQ))
-    allocate(szp(st_lo(1):st_hi(1), st_lo(2):st_hi(2), st_lo(3):st_hi(3), NQ))
-
-    allocate ( qxm(It_lo(1):It_hi(1), It_lo(2):It_hi(2), It_lo(3):It_hi(3), NQ))
-    allocate ( qxp(It_lo(1):It_hi(1), It_lo(2):It_hi(2), It_lo(3):It_hi(3), NQ))
-
-    allocate ( qym(It_lo(1):It_hi(1), It_lo(2):It_hi(2), It_lo(3):It_hi(3), NQ))
-    allocate ( qyp(It_lo(1):It_hi(1), It_lo(2):It_hi(2), It_lo(3):It_hi(3), NQ))
-
-    allocate ( qzm(It_lo(1):It_hi(1), It_lo(2):It_hi(2), It_lo(3):It_hi(3), NQ))
-    allocate ( qzp(It_lo(1):It_hi(1), It_lo(2):It_hi(2), It_lo(3):It_hi(3), NQ))
-
-    allocate(qint(It_lo(1):It_hi(1), It_lo(2):It_hi(2), It_lo(3):It_hi(3), NGDNV))
-
-    allocate(shk(shk_lo(1):shk_hi(1),shk_lo(2):shk_hi(2),shk_lo(3):shk_hi(3)))
-
     shk(:,:,:) = ZERO
 
     ! Check if we have violated the CFL criterion.
@@ -248,10 +229,8 @@ contains
 
     ! Compute flattening coefficient for slope calculations.
 #if 0
-    call allocate( flatn, q_lo, q_hi)
+    call bl_allocate( flatn, q_lo, q_hi)
 #endif
-
-    allocate( flatn(q_lo(1):q_hi(1), q_lo(2):q_hi(2), q_lo(3):q_hi(3)))
 
     g_lo = lo - ngf
     g_hi = hi + ngf
@@ -401,27 +380,6 @@ contains
     call deallocate(shk)
 #endif
 
-    deallocate(flatn)
-
-    deallocate(sxm)
-    deallocate(sxp)
-    deallocate(sym)
-    deallocate(syp)
-    deallocate(szm)
-    deallocate(szp)
-
-    deallocate(qxm)
-    deallocate(qxp)
-
-    deallocate(qym)
-    deallocate(qyp)
-
-    deallocate(qzm)
-    deallocate(qzp)
-
-    deallocate(qint)
-    deallocate(shk)
-
     ! Compute divergence of velocity field (on surroundingNodes(lo,hi))
     edge_lo = lo
     edge_hi = hi + 1
@@ -560,13 +518,6 @@ contains
     call deallocate(    q2)
     call deallocate(    q3)
 #endif
-
-    deallocate(   div)
-    deallocate( pdivu)
-
-    deallocate(    q1)
-    deallocate(    q2)
-    deallocate(    q3)
 
   end subroutine mol_single_stage
 
