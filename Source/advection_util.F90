@@ -40,6 +40,70 @@ module advection_util_module
 
   end type ht
 
+  ! Stores a pointer to a flux
+
+  type :: ft
+
+     real(rt), pointer, contiguous :: flux(:,:,:,:)
+
+  end type ft
+
+  ! This derived type stores all of the state arrays needed
+  ! during a hydro update, that are passed back to C++,
+  ! and any auxiliary information needed by them.
+
+  type :: ut
+
+     real(rt), pointer, contiguous :: uin(:,:,:,:)
+     integer,  pointer, contiguous :: uin_lo(:)
+     integer,  pointer, contiguous :: uin_hi(:)
+
+     real(rt), pointer, contiguous :: uout(:,:,:,:)
+     integer,  pointer, contiguous :: uout_lo(:)
+     integer,  pointer, contiguous :: uout_hi(:)
+
+     real(rt), pointer, contiguous :: q(:,:,:,:)
+     integer,  pointer, contiguous :: q_lo(:)
+     integer,  pointer, contiguous :: q_hi(:)
+
+     real(rt), pointer, contiguous :: qaux(:,:,:,:)
+     integer,  pointer, contiguous :: qaux_lo(:)
+     integer,  pointer, contiguous :: qaux_hi(:)
+
+     real(rt), pointer, contiguous :: update(:,:,:,:)
+     integer,  pointer, contiguous :: updt_lo(:)
+     integer,  pointer, contiguous :: updt_hi(:)
+     
+     real(rt), pointer, contiguous :: flux1(:,:,:,:)
+     integer,  pointer, contiguous :: flux1_lo(:)
+     integer,  pointer, contiguous :: flux1_hi(:)
+
+     real(rt), pointer, contiguous :: flux2(:,:,:,:)
+     integer,  pointer, contiguous :: flux2_lo(:)
+     integer,  pointer, contiguous :: flux2_hi(:)
+
+     real(rt), pointer, contiguous :: flux3(:,:,:,:)
+     integer,  pointer, contiguous :: flux3_lo(:)
+     integer,  pointer, contiguous :: flux3_hi(:)
+
+     real(rt), pointer, contiguous :: area1(:,:,:)
+     integer,  pointer, contiguous :: area1_lo(:)
+     integer,  pointer, contiguous :: area1_hi(:)
+
+     real(rt), pointer, contiguous :: area2(:,:,:)
+     integer,  pointer, contiguous :: area2_lo(:)
+     integer,  pointer, contiguous :: area2_hi(:)
+
+     real(rt), pointer, contiguous :: area3(:,:,:)
+     integer,  pointer, contiguous :: area3_lo(:)
+     integer,  pointer, contiguous :: area3_hi(:)
+
+     real(rt), pointer, contiguous :: vol(:,:,:)
+     integer,  pointer, contiguous :: vol_lo(:)
+     integer,  pointer, contiguous :: vol_hi(:)
+
+  end type ut
+
 contains
 
 #ifdef CUDA
@@ -293,10 +357,7 @@ contains
 #ifdef CUDA
   attributes(device) &
 #endif
-  subroutine compute_cfl(q, q_lo, q_hi, &
-                         qaux, qa_lo, qa_hi, &
-                         lo, hi, dt, dx, courno) &
-                         bind(C, name = "compute_cfl")
+  subroutine compute_cfl(u, lo, hi, dt, dx, courno)
 
     use bl_constants_module, only: ZERO, ONE
     use amrex_fort_module, only: rt => amrex_real
@@ -305,16 +366,14 @@ contains
 
     implicit none
 
-    integer :: lo(3), hi(3)
-    integer :: q_lo(3), q_hi(3), qa_lo(3), qa_hi(3)
+    integer,  intent(in   ) :: lo(3), hi(3)
+    type(ut), intent(in   ) :: u
+    real(rt), intent(in   ) :: dt, dx(3)
+    real(rt), intent(inout) :: courno
 
-    real(rt)         :: q(q_lo(1):q_hi(1),q_lo(2):q_hi(2),q_lo(3):q_hi(3),NQ)
-    real(rt)         :: qaux(qa_lo(1):qa_hi(1),qa_lo(2):qa_hi(2),qa_lo(3):qa_hi(3),NQAUX)
-    real(rt)         :: dt, dx(3), courno
-
-    real(rt)         :: courx, coury, courz, courmx, courmy, courmz, courtmp
-    real(rt)         :: dtdx, dtdy, dtdz
-    integer          :: i, j, k
+    real(rt) :: courx, coury, courz, courmx, courmy, courmz, courtmp
+    real(rt) :: dtdx, dtdy, dtdz
+    integer  :: i, j, k
 
     ! Compute running max of Courant number over grids
 
@@ -340,9 +399,9 @@ contains
        do j = lo(2),hi(2)
           do i = lo(1),hi(1)
 
-             courx = ( qaux(i,j,k,QC) + abs(q(i,j,k,QU)) ) * dtdx
-             coury = ( qaux(i,j,k,QC) + abs(q(i,j,k,QV)) ) * dtdy
-             courz = ( qaux(i,j,k,QC) + abs(q(i,j,k,QW)) ) * dtdz
+             courx = ( u%qaux(i,j,k,QC) + abs(u%q(i,j,k,QU)) ) * dtdx
+             coury = ( u%qaux(i,j,k,QC) + abs(u%q(i,j,k,QV)) ) * dtdy
+             courz = ( u%qaux(i,j,k,QC) + abs(u%q(i,j,k,QW)) ) * dtdz
 
              courmx = max( courmx, courx )
              courmy = max( courmy, coury )
@@ -363,8 +422,8 @@ contains
                 print *,'   '
                 call bl_warning("Warning:: advection_util_nd.F90 :: CFL violation in compute_cfl")
                 print *,'>>> ... at cell (i,j,k)   : ', i, j, k
-                print *,'>>> ... u,v,w, c            ', q(i,j,k,QU), q(i,j,k,QV), q(i,j,k,QW), qaux(i,j,k,QC)
-                print *,'>>> ... density             ', q(i,j,k,QRHO)
+                print *,'>>> ... u,v,w, c            ', u%q(i,j,k,QU), u%q(i,j,k,QV), u%q(i,j,k,QW), u%qaux(i,j,k,QC)
+                print *,'>>> ... density             ', u%q(i,j,k,QRHO)
              endif
 #endif
 
@@ -523,10 +582,7 @@ contains
 #ifdef CUDA
   attributes(device) &
 #endif
-  subroutine normalize_species_fluxes(flux1,flux1_lo,flux1_hi, &
-                                      flux2,flux2_lo,flux2_hi, &
-                                      flux3,flux3_lo,flux3_hi, &
-                                      lo, hi)
+  subroutine normalize_species_fluxes(u, lo, hi)
 
     ! here we normalize the fluxes of the mass fractions so that
     ! they sum to 0.  This is essentially the CMA procedure that is
@@ -540,12 +596,7 @@ contains
     implicit none
 
     integer,  intent(in   ) :: lo(3), hi(3)
-    integer,  intent(in   ) :: flux1_lo(3), flux1_hi(3)
-    integer,  intent(in   ) :: flux2_lo(3), flux2_hi(3)
-    integer,  intent(in   ) :: flux3_lo(3), flux3_hi(3)
-    real(rt), intent(inout) :: flux1(flux1_lo(1):flux1_hi(1),flux1_lo(2):flux1_hi(2),flux1_lo(3):flux1_hi(3),NVAR)
-    real(rt), intent(inout) :: flux2(flux2_lo(1):flux2_hi(1),flux2_lo(2):flux2_hi(2),flux2_lo(3):flux2_hi(3),NVAR)
-    real(rt), intent(inout) :: flux3(flux3_lo(1):flux3_hi(1),flux3_lo(2):flux3_hi(2),flux3_lo(3):flux3_hi(3),NVAR)
+    type(ut), intent(inout) :: u
 
     ! Local variables
     integer  :: i, j, k, n
@@ -556,15 +607,15 @@ contains
           do i = lo(1),hi(1)+1
              sum = ZERO
              do n = UFS, UFS+nspec-1
-                sum = sum + flux1(i,j,k,n)
+                sum = sum + u%flux1(i,j,k,n)
              end do
              if (sum .ne. ZERO) then
-                fac = flux1(i,j,k,URHO) / sum
+                fac = u%flux1(i,j,k,URHO) / sum
              else
                 fac = ONE
              end if
              do n = UFS, UFS+nspec-1
-                flux1(i,j,k,n) = flux1(i,j,k,n) * fac
+                u%flux1(i,j,k,n) = u%flux1(i,j,k,n) * fac
              end do
           end do
        end do
@@ -575,15 +626,15 @@ contains
           do i = lo(1),hi(1)
              sum = ZERO
              do n = UFS, UFS+nspec-1
-                sum = sum + flux2(i,j,k,n)
+                sum = sum + u%flux2(i,j,k,n)
              end do
              if (sum .ne. ZERO) then
-                fac = flux2(i,j,k,URHO) / sum
+                fac = u%flux2(i,j,k,URHO) / sum
              else
                 fac = ONE
              end if
              do n = UFS, UFS+nspec-1
-                flux2(i,j,k,n) = flux2(i,j,k,n) * fac
+                u%flux2(i,j,k,n) = u%flux2(i,j,k,n) * fac
              end do
           end do
        end do
@@ -594,15 +645,15 @@ contains
           do i = lo(1),hi(1)
              sum = ZERO
              do n = UFS, UFS+nspec-1
-                sum = sum + flux3(i,j,k,n)
+                sum = sum + u%flux3(i,j,k,n)
              end do
              if (sum .ne. ZERO) then
-                fac = flux3(i,j,k,URHO) / sum
+                fac = u%flux3(i,j,k,URHO) / sum
              else
                 fac = ONE
              end if
              do n = UFS, UFS+nspec-1
-                flux3(i,j,k,n) = flux3(i,j,k,n) * fac
+                u%flux3(i,j,k,n) = u%flux3(i,j,k,n) * fac
              end do
           end do
        end do
@@ -617,7 +668,7 @@ contains
 #ifdef CUDA
   attributes(device) &
 #endif
-  subroutine divu(lo,hi,q,q_lo,q_hi,dx,div,div_lo,div_hi)
+  subroutine divu(lo, hi, u, h, dx)
 
     use bl_constants_module, only: FOURTH, ONE
     use amrex_fort_module, only: rt => amrex_real
@@ -626,11 +677,9 @@ contains
     implicit none
 
     integer,  intent(in   ) :: lo(3), hi(3)
-    integer,  intent(in   ) :: q_lo(3), q_hi(3)
-    integer,  intent(in   ) :: div_lo(3), div_hi(3)
     real(rt), intent(in   ) :: dx(3)
-    real(rt), intent(inout) :: div(div_lo(1):div_hi(1),div_lo(2):div_hi(2),div_lo(3):div_hi(3))
-    real(rt), intent(in   ) :: q(q_lo(1):q_hi(1),q_lo(2):q_hi(2),q_lo(3):q_hi(3),QVAR)
+    type(ht), intent(inout) :: h
+    type(ut), intent(inout) :: u
 
     integer  :: i, j, k
     real(rt) :: ux, vy, wz, dxinv, dyinv, dzinv
@@ -644,24 +693,24 @@ contains
           do i=lo(1),hi(1)+1
 
              ux = FOURTH*( &
-                    + q(i  ,j  ,k  ,QU) - q(i-1,j  ,k  ,QU) &
-                    + q(i  ,j  ,k-1,QU) - q(i-1,j  ,k-1,QU) &
-                    + q(i  ,j-1,k  ,QU) - q(i-1,j-1,k  ,QU) &
-                    + q(i  ,j-1,k-1,QU) - q(i-1,j-1,k-1,QU) ) * dxinv
+                    + u%q(i  ,j  ,k  ,QU) - u%q(i-1,j  ,k  ,QU) &
+                    + u%q(i  ,j  ,k-1,QU) - u%q(i-1,j  ,k-1,QU) &
+                    + u%q(i  ,j-1,k  ,QU) - u%q(i-1,j-1,k  ,QU) &
+                    + u%q(i  ,j-1,k-1,QU) - u%q(i-1,j-1,k-1,QU) ) * dxinv
 
              vy = FOURTH*( &
-                    + q(i  ,j  ,k  ,QV) - q(i  ,j-1,k  ,QV) &
-                    + q(i  ,j  ,k-1,QV) - q(i  ,j-1,k-1,QV) &
-                    + q(i-1,j  ,k  ,QV) - q(i-1,j-1,k  ,QV) &
-                    + q(i-1,j  ,k-1,QV) - q(i-1,j-1,k-1,QV) ) * dyinv
+                    + u%q(i  ,j  ,k  ,QV) - u%q(i  ,j-1,k  ,QV) &
+                    + u%q(i  ,j  ,k-1,QV) - u%q(i  ,j-1,k-1,QV) &
+                    + u%q(i-1,j  ,k  ,QV) - u%q(i-1,j-1,k  ,QV) &
+                    + u%q(i-1,j  ,k-1,QV) - u%q(i-1,j-1,k-1,QV) ) * dyinv
 
              wz = FOURTH*( &
-                    + q(i  ,j  ,k  ,QW) - q(i  ,j  ,k-1,QW) &
-                    + q(i  ,j-1,k  ,QW) - q(i  ,j-1,k-1,QW) &
-                    + q(i-1,j  ,k  ,QW) - q(i-1,j  ,k-1,QW) &
-                    + q(i-1,j-1,k  ,QW) - q(i-1,j-1,k-1,QW) ) * dzinv
+                    + u%q(i  ,j  ,k  ,QW) - u%q(i  ,j  ,k-1,QW) &
+                    + u%q(i  ,j-1,k  ,QW) - u%q(i  ,j-1,k-1,QW) &
+                    + u%q(i-1,j  ,k  ,QW) - u%q(i-1,j  ,k-1,QW) &
+                    + u%q(i-1,j-1,k  ,QW) - u%q(i-1,j-1,k-1,QW) ) * dzinv
 
-             div(i,j,k) = ux + vy + wz
+             h%div(i,j,k) = ux + vy + wz
 
           enddo
        enddo

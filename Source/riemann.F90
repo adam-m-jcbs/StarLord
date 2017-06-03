@@ -9,7 +9,7 @@ module riemann_module
                                 QC, QCSML, QGAMC, &
                                 small_dens, small_temp, &
                                 npassive, upass_map, qpass_map
-  use advection_util_module, only: ht
+  use advection_util_module, only: ht, ut, ft
 
   implicit none
 
@@ -20,9 +20,7 @@ contains
 #ifdef CUDA
   attributes(device) &
 #endif
-  subroutine cmpflx(flx, flx_lo, flx_hi, &
-                    qaux, qa_lo, qa_hi, &
-                    h, idir, lo, hi, domlo, domhi)
+  subroutine cmpflx(u, f, h, idir, lo, hi, domlo, domhi)
 
     use eos_module, only: eos
     use eos_type_module, only: eos_t, eos_input_re
@@ -30,19 +28,12 @@ contains
     use amrex_fort_module, only: rt => amrex_real
     use bl_constants_module, only: ZERO, HALF, ONE
 
-    integer,  intent(in   ) :: flx_lo(3), flx_hi(3)
-    integer,  intent(in   ) :: qa_lo(3), qa_hi(3)
     integer,  intent(in   ) :: lo(3), hi(3), idir
     integer,  intent(in   ) :: domlo(3),domhi(3)
 
     type(ht), intent(inout) :: h
-
-    real(rt), intent(inout) :: flx(flx_lo(1):flx_hi(1),flx_lo(2):flx_hi(2),flx_lo(3):flx_hi(3),NVAR)
-
-    ! qaux come in dimensioned as the full box, so we use k3d here to
-    ! index it in z
-
-    real(rt), intent(in) :: qaux(qa_lo(1):qa_hi(1),qa_lo(2):qa_hi(2),qa_lo(3):qa_hi(3),NQAUX)
+    type(ut), intent(inout) :: u
+    type(ft), intent(inout) :: f
 
     ! local variables
 
@@ -57,10 +48,10 @@ contains
           do j = lo(2), hi(2)
              !dir$ ivdep
              do i = lo(1), hi(1)
-                h%smallc(i,j,k) = max( qaux(i,j,k,QCSML), qaux(i-1,j,k,QCSML) )
-                h%cavg(i,j,k)   = HALF*( qaux(i,j,k,QC) + qaux(i-1,j,k,QC) )
-                h%gamcm(i,j,k)  = qaux(i-1,j,k,QGAMC)
-                h%gamcp(i,j,k)  = qaux(i,j,k,QGAMC)
+                h%smallc(i,j,k) = max( u%qaux(i,j,k,QCSML), u%qaux(i-1,j,k,QCSML) )
+                h%cavg(i,j,k)   = HALF*( u%qaux(i,j,k,QC) + u%qaux(i-1,j,k,QC) )
+                h%gamcm(i,j,k)  = u%qaux(i-1,j,k,QGAMC)
+                h%gamcp(i,j,k)  = u%qaux(i,j,k,QGAMC)
              end do
           end do
        end do
@@ -69,10 +60,10 @@ contains
           do j = lo(2), hi(2)
              !dir$ ivdep
              do i = lo(1), hi(1)
-                h%smallc(i,j,k) = max( qaux(i,j,k,QCSML), qaux(i,j-1,k,QCSML) )
-                h%cavg(i,j,k)   = HALF*( qaux(i,j,k,QC) + qaux(i,j-1,k,QC) )
-                h%gamcm(i,j,k)  = qaux(i,j-1,k,QGAMC)
-                h%gamcp(i,j,k)  = qaux(i,j,k,QGAMC)
+                h%smallc(i,j,k) = max( u%qaux(i,j,k,QCSML), u%qaux(i,j-1,k,QCSML) )
+                h%cavg(i,j,k)   = HALF*( u%qaux(i,j,k,QC) + u%qaux(i,j-1,k,QC) )
+                h%gamcm(i,j,k)  = u%qaux(i,j-1,k,QGAMC)
+                h%gamcp(i,j,k)  = u%qaux(i,j,k,QGAMC)
              end do
           end do
        end do
@@ -81,10 +72,10 @@ contains
           do j = lo(2), hi(2)
              !dir$ ivdep
              do i = lo(1), hi(1)
-                h%smallc(i,j,k) = max( qaux(i,j,k,QCSML), qaux(i,j,k-1,QCSML) )
-                h%cavg(i,j,k)   = HALF*( qaux(i,j,k,QC) + qaux(i,j,k-1,QC) )
-                h%gamcm(i,j,k)  = qaux(i,j,k-1,QGAMC)
-                h%gamcp(i,j,k)  = qaux(i,j,k,QGAMC)
+                h%smallc(i,j,k) = max( u%qaux(i,j,k,QCSML), u%qaux(i,j,k-1,QCSML) )
+                h%cavg(i,j,k)   = HALF*( u%qaux(i,j,k,QC) + u%qaux(i,j,k-1,QC) )
+                h%gamcm(i,j,k)  = u%qaux(i,j,k-1,QGAMC)
+                h%gamcp(i,j,k)  = u%qaux(i,j,k,QGAMC)
              end do
           end do
        end do
@@ -145,7 +136,7 @@ contains
        end do
     end do
 
-    call riemannus(flx, flx_lo, flx_hi, h, idir, lo, hi, domlo, domhi)
+    call riemannus(u, f, h, idir, lo, hi, domlo, domhi)
 
   end subroutine cmpflx
 
@@ -154,7 +145,7 @@ contains
 #ifdef CUDA
   attributes(device) &
 #endif
-  subroutine riemannus(uflx,uflx_lo,uflx_hi,h,idir,lo,hi,domlo,domhi)
+  subroutine riemannus(u, f, h, idir, lo, hi, domlo, domhi)
 
     use amrex_fort_module, only: rt => amrex_real
     use bl_constants_module, only: ZERO, HALF, ONE
@@ -163,12 +154,12 @@ contains
     real(rt), parameter :: small = 1.e-8_rt
     real(rt), parameter :: small_pres = 1.e-200_rt
 
-    integer,  intent(in   ) :: uflx_lo(3),uflx_hi(3)
-    integer,  intent(in   ) :: lo(3),hi(3),idir
-    integer,  intent(in   ) :: domlo(3),domhi(3)
+    integer,  intent(in   ) :: lo(3), hi(3), idir
+    integer,  intent(in   ) :: domlo(3), domhi(3)
 
     type(ht), intent(inout) :: h
-    real(rt), intent(inout) :: uflx(uflx_lo(1):uflx_hi(1),uflx_lo(2):uflx_hi(2),uflx_lo(3):uflx_hi(3),NVAR)
+    type(ut), intent(inout) :: u
+    type(ft), intent(inout) :: f
 
     integer :: i, j, k
     integer :: n, nqp, ipassive
@@ -387,16 +378,16 @@ contains
 
 
              ! Compute fluxes, order as conserved state (not q)
-             uflx(i,j,k,URHO) = h%qint(i,j,k,GDRHO)*u_adv
+             f%flux(i,j,k,URHO) = h%qint(i,j,k,GDRHO)*u_adv
 
-             uflx(i,j,k,im1) = uflx(i,j,k,URHO)*h%qint(i,j,k,iu ) + h%qint(i,j,k,GDPRES)
-             uflx(i,j,k,im2) = uflx(i,j,k,URHO)*h%qint(i,j,k,iv1)
-             uflx(i,j,k,im3) = uflx(i,j,k,URHO)*h%qint(i,j,k,iv2)
+             f%flux(i,j,k,im1) = f%flux(i,j,k,URHO)*h%qint(i,j,k,iu ) + h%qint(i,j,k,GDPRES)
+             f%flux(i,j,k,im2) = f%flux(i,j,k,URHO)*h%qint(i,j,k,iv1)
+             f%flux(i,j,k,im3) = f%flux(i,j,k,URHO)*h%qint(i,j,k,iv2)
 
              rhoetot = regdnv + HALF*h%qint(i,j,k,GDRHO)*(h%qint(i,j,k,iu)**2 + h%qint(i,j,k,iv1)**2 + h%qint(i,j,k,iv2)**2)
 
-             uflx(i,j,k,UEDEN) = u_adv*(rhoetot + h%qint(i,j,k,GDPRES))
-             uflx(i,j,k,UEINT) = u_adv*regdnv
+             f%flux(i,j,k,UEDEN) = u_adv*(rhoetot + h%qint(i,j,k,GDPRES))
+             f%flux(i,j,k,UEINT) = u_adv*regdnv
              ! store this for vectorization
              h%us1d(i,j,k) = ustar
 
@@ -410,14 +401,14 @@ contains
              !dir$ ivdep
              do i = lo(1), hi(1)
                 if (h%us1d(i,j,k) > ZERO) then
-                   uflx(i,j,k,n) = uflx(i,j,k,URHO)*h%qm(i,j,k,nqp,idir)
+                   f%flux(i,j,k,n) = f%flux(i,j,k,URHO)*h%qm(i,j,k,nqp,idir)
 
                 else if (h%us1d(i,j,k) < ZERO) then
-                   uflx(i,j,k,n) = uflx(i,j,k,URHO)*h%qp(i,j,k,nqp,idir)
+                   f%flux(i,j,k,n) = f%flux(i,j,k,URHO)*h%qp(i,j,k,nqp,idir)
 
                 else
                    qavg = HALF * (h%qm(i,j,k,nqp,idir) + h%qp(i,j,k,nqp,idir))
-                   uflx(i,j,k,n) = uflx(i,j,k,URHO)*qavg
+                   f%flux(i,j,k,n) = f%flux(i,j,k,URHO)*qavg
                 endif
              enddo
 
